@@ -1,0 +1,3 @@
+#!/bin/sh
+exec /home/netforce/.vscode-server/bin/1b6a188127eeaf9194f945eb6eb89a657e93c54c/node \
+  /home/netforce/oritsubushi/.tools/pnpm-js/package/bin/pnpm.cjs "$@"
