@@ -6,14 +6,10 @@ import { CircleMarker, MapContainer, Popup, TileLayer, useMap } from "react-leaf
 import type { NearbyStation } from "@/lib/domain";
 import { formatFirstAchievedOn } from "@/lib/date-code";
 
-type Props = {
-  initialStations: NearbyStation[];
-};
-
 type LocationState =
   | { status: "loading"; stations: NearbyStation[] }
   | { status: "ready"; latitude: number; longitude: number; stations: NearbyStation[] }
-  | { status: "error"; message: string; stations: NearbyStation[] };
+  | { status: "error"; message: string };
 
 function FitMarkers({ stations }: { stations: NearbyStation[] }) {
   const map = useMap();
@@ -37,10 +33,10 @@ function FitMarkers({ stations }: { stations: NearbyStation[] }) {
   return null;
 }
 
-export function LocationMapClient({ initialStations }: Props) {
+export function LocationMapClient() {
   const [state, setState] = useState<LocationState>({
     status: "loading",
-    stations: initialStations
+    stations: []
   });
   const [selectedGroupKey, setSelectedGroupKey] = useState<string | null>(null);
   const [groupIndexes, setGroupIndexes] = useState<Record<string, number>>({});
@@ -49,8 +45,7 @@ export function LocationMapClient({ initialStations }: Props) {
     if (!navigator.geolocation) {
       setState({
         status: "error",
-        message: "この端末では位置情報を取得できません。",
-        stations: initialStations
+        message: "この端末では位置情報を取得できません。"
       });
       return;
     }
@@ -70,23 +65,21 @@ export function LocationMapClient({ initialStations }: Props) {
         } catch (error) {
           setState({
             status: "error",
-            message: error instanceof Error ? error.message : "周辺駅の取得に失敗しました。",
-            stations: initialStations
+            message: error instanceof Error ? error.message : "周辺駅の取得に失敗しました。"
           });
         }
       },
       () => {
         setState({
           status: "error",
-          message: "位置情報の利用が拒否されました。",
-          stations: initialStations
+          message: "位置情報の利用が拒否されました。"
         });
       },
       { enableHighAccuracy: true }
     );
-  }, [initialStations]);
+  }, []);
 
-  const stations = state.stations;
+  const stations = state.status === "ready" ? state.stations : [];
   const stationGroups = useMemo(() => {
     const groups = new Map<string, NearbyStation[]>();
 
@@ -126,25 +119,42 @@ export function LocationMapClient({ initialStations }: Props) {
     return group.stations[index] ?? group.stations[0] ?? null;
   }, [groupIndexes, selectedGroupKey, stationGroups]);
 
-  const fallbackCenter = useMemo<[number, number]>(() => {
-    const first = stations.find((station) => station.latitude !== null && station.longitude !== null);
-    if (!first) {
-      return [35.681236, 139.767125];
-    }
-    return [Number(first.latitude), Number(first.longitude)];
-  }, [stations]);
+  if (state.status === "loading") {
+    return (
+      <div className="stack">
+        <div className="inline-meta">
+          <span className="pill">現在地を取得中</span>
+        </div>
+        <div className="card">
+          <div className="card-inner">
+            <p className="subtle">位置情報の取得が完了すると周辺駅の地図を表示します。</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (state.status === "error") {
+    return (
+      <div className="stack">
+        <div className="inline-meta">
+          <span className="pill">{state.message}</span>
+        </div>
+        <div className="card">
+          <div className="card-inner">
+            <p className="subtle">位置情報を利用できないため、地図を表示できません。</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const mapCenter: [number, number] = [state.latitude, state.longitude];
 
   return (
     <div className="stack">
-      <div className="inline-meta">
-        <span className="pill">
-          {state.status === "loading" && "現在地を取得中"}
-          {state.status === "ready" && "地図の中心の周辺10駅を表示"}
-          {state.status === "error" && state.message}
-        </span>
-      </div>
       <div className="card map-panel">
-        <MapContainer center={fallbackCenter} zoom={13} className="map-frame" scrollWheelZoom>
+        <MapContainer center={mapCenter} zoom={13} className="map-frame" scrollWheelZoom>
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"

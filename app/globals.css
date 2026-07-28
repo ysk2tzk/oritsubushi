@@ -175,8 +175,18 @@ textarea {
 }
 
 .map-frame {
-  height: min(52vh, 460px);
+  height: clamp(280px, 40vh, 360px);
   width: 100%;
+}
+
+@media (max-width: 430px) {
+  .map-frame {
+    height: clamp(220px, 32dvh, 280px);
+  }
+
+  .nearby-station-card .nearby-station-name {
+    font-size: 2rem;
+  }
 }
 
 .bottom-tabs {

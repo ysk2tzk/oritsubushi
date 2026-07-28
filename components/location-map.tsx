@@ -1,7 +1,6 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import type { NearbyStation } from "@/lib/domain";
 
 const LocationMapClient = dynamic(
   () => import("@/components/location-map-client").then((mod) => mod.LocationMapClient),
@@ -20,6 +19,6 @@ const LocationMapClient = dynamic(
   }
 );
 
-export function LocationMap({ initialStations }: { initialStations: NearbyStation[] }) {
-  return <LocationMapClient initialStations={initialStations} />;
+export function LocationMap() {
+  return <LocationMapClient />;
 }
