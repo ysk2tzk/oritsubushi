@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { BottomTabs } from "@/components/bottom-tabs";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 import { formatFirstAchievedOn } from "@/lib/date-code";
 import { getLineTimeline } from "@/lib/domain";
 
@@ -19,6 +20,14 @@ export default async function LinePage({
         <div className="stack">
           <div className="card line-header-card">
             <div className="card-inner stack line-header">
+              <Breadcrumbs
+                items={[
+                  { label: "記録するTop", href: "/record" },
+                  { label: "会社一覧", href: `/record/company-type/${company.company_type}` },
+                  { label: "路線一覧", href: `/record/company/${company.id}` },
+                  { label: line.name }
+                ]}
+              />
               <h1 className="hero-title">{line.name}</h1>
               <p className="subtle">{company.name}</p>
             </div>
@@ -26,7 +35,11 @@ export default async function LinePage({
           <div className="timeline">
             {items.map((item, index) =>
               item.type === "station" ? (
-                <Link key={`${item.station.id}-${index}`} href={`/stations/${item.station.id}`} className="station-row">
+                <Link
+                  key={`${item.station.id}-${index}`}
+                  href={`/stations/${item.station.id}?from=line&lineId=${lineId}&lineName=${encodeURIComponent(line.name)}`}
+                  className="station-row"
+                >
                   <div>
                     <strong>{item.station.name}</strong>
                     {item.station.note ? <div className="subtle">{item.station.note}</div> : null}
@@ -38,7 +51,11 @@ export default async function LinePage({
                   </span>
                 </Link>
               ) : (
-                <Link key={`${item.section.id}-${index}`} href={`/sections/${item.section.id}`} className="section-row">
+                <Link
+                  key={`${item.section.id}-${index}`}
+                  href={`/sections/${item.section.id}?from=line&lineId=${lineId}&lineName=${encodeURIComponent(line.name)}`}
+                  className="section-row"
+                >
                   <span className="section-arrow" aria-hidden="true">
                     ↓
                   </span>

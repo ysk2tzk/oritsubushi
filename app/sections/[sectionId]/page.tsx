@@ -4,11 +4,14 @@ import { getSectionRecordContext } from "@/lib/domain";
 export const dynamic = "force-dynamic";
 
 export default async function SectionPage({
-  params
+  params,
+  searchParams
 }: {
   params: Promise<{ sectionId: string }>;
+  searchParams: Promise<{ from?: string; lineId?: string; lineName?: string }>;
 }) {
   const { sectionId } = await params;
+  const { from, lineId, lineName } = await searchParams;
   const { section, fromStation, toStation } = await getSectionRecordContext(Number(sectionId));
 
   return (
@@ -18,7 +21,15 @@ export default async function SectionPage({
       noteLabel="備考"
       initialFirstAchievedOn={section.first_achieved_on}
       initialNote={section.note}
-      backHref={`/record/line/${section.line_id}`}
+      breadcrumbs={[
+        { label: "記録するTop", href: "/record" },
+        { label: "会社一覧", href: `/record/company-type/${fromStation.company_id}` },
+        { label: "路線一覧", href: `/record/company/${fromStation.company_id}` },
+        ...(from === "line" && lineId && lineName
+          ? [{ label: lineName, href: `/record/line/${lineId}` }]
+          : []),
+        { label: `${fromStation.name} → ${toStation.name}` }
+      ]}
     />
   );
 }

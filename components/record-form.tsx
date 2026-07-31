@@ -2,8 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 import { DateWheel } from "@/components/date-wheel";
-import { decodeFirstAchievedOn, encodeFirstAchievedOn, formatFirstAchievedOn } from "@/lib/date-code";
+import { decodeFirstAchievedOn, encodeFirstAchievedOn } from "@/lib/date-code";
 
 type Props = {
   endpoint: string;
@@ -12,7 +13,7 @@ type Props = {
   noteLabel: string;
   initialFirstAchievedOn: string | null;
   initialNote: string | null;
-  backHref?: string;
+  breadcrumbs?: Array<{ label: string; href?: string }>;
 };
 
 export function RecordForm({
@@ -22,7 +23,7 @@ export function RecordForm({
   noteLabel,
   initialFirstAchievedOn,
   initialNote,
-  backHref
+  breadcrumbs
 }: Props) {
   const router = useRouter();
   const [dateValue, setDateValue] = useState(decodeFirstAchievedOn(initialFirstAchievedOn));
@@ -65,11 +66,15 @@ export function RecordForm({
       <div className="stack">
         <div className="card">
           <div className="card-inner stack">
+            {breadcrumbs && breadcrumbs.length > 0 ? <Breadcrumbs items={breadcrumbs} /> : null}
             <div>
               <h1 className="hero-title">{title}</h1>
               {subtitle ? <p className="subtle">{subtitle}</p> : null}
-              <div className="pill">現在値: {formatFirstAchievedOn(initialFirstAchievedOn)}</div>
             </div>
+            <fieldset className="field" style={{ border: "none", padding: 0, margin: 0 }}>
+              <legend>初回達成日</legend>
+              <DateWheel value={dateValue} onChange={setDateValue} />
+            </fieldset>
             <div className="field">
               <label htmlFor="note">{noteLabel}</label>
               <textarea
@@ -79,10 +84,6 @@ export function RecordForm({
                 placeholder="備考を入力"
               />
             </div>
-            <fieldset className="field" style={{ border: "none", padding: 0, margin: 0 }}>
-              <legend>初回達成日</legend>
-              <DateWheel value={dateValue} onChange={setDateValue} />
-            </fieldset>
             {message ? <div className="pill">{message}</div> : null}
             <div className="form-actions">
               <button className="button" disabled={submitting} onClick={() => void submit(false)} type="button">
@@ -97,11 +98,6 @@ export function RecordForm({
                 未記録に戻す
               </button>
             </div>
-            {backHref ? (
-              <a className="ghost-button" href={backHref}>
-                戻る
-              </a>
-            ) : null}
           </div>
         </div>
       </div>

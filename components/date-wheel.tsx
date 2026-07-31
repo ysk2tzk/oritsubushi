@@ -27,11 +27,11 @@ export function DateWheel({ value, onChange }: Props) {
   );
 
   return (
-    <div className="value-pair" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
+    <div className="date-wheel">
       <div className="field">
-        <label htmlFor="year">年</label>
         <select
           id="year"
+          aria-label="年"
           value={value.year}
           onChange={(event) => {
             const year = event.target.value;
@@ -51,10 +51,13 @@ export function DateWheel({ value, onChange }: Props) {
           ))}
         </select>
       </div>
+      <span className="date-wheel-separator" aria-hidden="true">
+        年
+      </span>
       <div className="field">
-        <label htmlFor="month">月</label>
         <select
           id="month"
+          aria-label="月"
           value={value.month}
           disabled={!value.year || value.year === unknown}
           onChange={(event) => {
@@ -75,10 +78,13 @@ export function DateWheel({ value, onChange }: Props) {
           ))}
         </select>
       </div>
+      <span className="date-wheel-separator" aria-hidden="true">
+        月
+      </span>
       <div className="field">
-        <label htmlFor="day">日</label>
         <select
           id="day"
+          aria-label="日"
           value={value.day}
           disabled={!value.month || value.month === unknown}
           onChange={(event) => {
@@ -98,6 +104,9 @@ export function DateWheel({ value, onChange }: Props) {
           ))}
         </select>
       </div>
+      <span className="date-wheel-separator" aria-hidden="true">
+        日
+      </span>
     </div>
   );
 }
