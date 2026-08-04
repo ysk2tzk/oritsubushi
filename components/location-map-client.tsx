@@ -2,8 +2,8 @@
 
 import "leaflet/dist/leaflet.css";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { CircleMarker, MapContainer, Popup, TileLayer, useMap } from "react-leaflet";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { CircleMarker, MapContainer, Popup, TileLayer, useMapEvents } from "react-leaflet";
 import type { NearbyStation } from "@/lib/domain";
 import { formatFirstAchievedOn } from "@/lib/date-code";
 
@@ -12,92 +12,154 @@ type LocationState =
   | { status: "ready"; latitude: number; longitude: number; stations: NearbyStation[] }
   | { status: "error"; message: string };
 
-function FitMarkers({ stations }: { stations: NearbyStation[] }) {
-  const map = useMap();
+type VisibleGroup = {
+  key: string;
+  stations: NearbyStation[];
+  latitude: number;
+  longitude: number;
+};
+
+type Bounds = any;
+
+type MapEventsProps = {
+  onBoundsChange: (bounds: Bounds) => void;
+  onRequestNearby: (center: { lat: number; lng: number }) => void;
+};
+
+function shuffle<T>(arr: T[]) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function computeVisible(groups: VisibleGroup[], bounds: Bounds) {
+  if (!bounds) return [];
+
+  const isLeafletBounds = typeof bounds.getSouthWest === "function" && typeof bounds.getNorthEast === "function";
+  const sw = isLeafletBounds ? bounds.getSouthWest() : { lat: bounds[0][0], lng: bounds[0][1] };
+  const ne = isLeafletBounds ? bounds.getNorthEast() : { lat: bounds[1][0], lng: bounds[1][1] };
+
+  const inBounds = groups.filter((group) => {
+    const lat = group.latitude;
+    const lng = group.longitude;
+    return lat >= sw.lat && lat <= ne.lat && lng >= sw.lng && lng <= ne.lng;
+  });
+
+  if (inBounds.length <= 10) return inBounds;
+  return shuffle(inBounds).slice(0, 10);
+}
+
+function MapEvents({ onBoundsChange, onRequestNearby }: MapEventsProps) {
+  const timerRef = useRef<number | null>(null);
+  const lastRequestedCenter = useRef<{ lat: number; lng: number } | null>(null);
+
+  const map = useMapEvents({
+    moveend() {
+      const bounds = map.getBounds();
+      onBoundsChange(bounds);
+
+      if (timerRef.current) {
+        window.clearTimeout(timerRef.current);
+      }
+
+      timerRef.current = window.setTimeout(() => {
+        const center = map.getCenter();
+        const last = lastRequestedCenter.current;
+        const shouldFetch =
+          !last ||
+          Math.abs(center.lat - last.lat) > 0.01 ||
+          Math.abs(center.lng - last.lng) > 0.01;
+
+        if (shouldFetch) {
+          lastRequestedCenter.current = { lat: center.lat, lng: center.lng };
+          onRequestNearby({ lat: center.lat, lng: center.lng });
+        }
+      }, 300);
+    },
+    zoomend() {
+      onBoundsChange(map.getBounds());
+    }
+  });
 
   useEffect(() => {
-    if (stations.length === 0) {
-      return;
-    }
-
-    const bounds = stations
-      .filter((station) => station.latitude !== null && station.longitude !== null)
-      .map((station) => [Number(station.latitude), Number(station.longitude)] as [number, number]);
-
-    if (bounds.length === 0) {
-      return;
-    }
-
-    map.fitBounds(bounds, { padding: [36, 36], maxZoom: 15 });
-  }, [map, stations]);
+    return () => {
+      if (timerRef.current) {
+        window.clearTimeout(timerRef.current);
+      }
+    };
+  }, []);
 
   return null;
 }
 
 export function LocationMapClient() {
-  const [state, setState] = useState<LocationState>({
-    status: "loading",
-    stations: []
-  });
+  const [state, setState] = useState<LocationState>({ status: "loading", stations: [] });
   const [selectedGroupKey, setSelectedGroupKey] = useState<string | null>(null);
   const [groupIndexes, setGroupIndexes] = useState<Record<string, number>>({});
+  const [mapBounds, setMapBounds] = useState<Bounds | null>(null);
+  const [mapCenter, setMapCenter] = useState<[number, number] | null>(null);
+  const lastRequestedCenterRef = useRef<{ lat: number; lng: number } | null>(null);
+
+  const TOKYO_LAT = 35.681236;
+  const TOKYO_LNG = 139.767125;
+
+  const fetchNearbyStations = useCallback(async (center: { lat: number; lng: number }) => {
+    try {
+      const response = await fetch(`/api/stations/nearby?lat=${center.lat}&lng=${center.lng}`);
+      if (!response.ok) {
+        throw new Error("周辺駅の取得に失敗しました。");
+      }
+
+      const result = (await response.json()) as { stations: NearbyStation[] };
+      setState({ status: "ready", latitude: center.lat, longitude: center.lng, stations: result.stations });
+      setMapCenter([center.lat, center.lng]);
+      lastRequestedCenterRef.current = center;
+    } catch (error) {
+      setState({ status: "error", message: error instanceof Error ? error.message : "周辺駅の取得に失敗しました。" });
+    }
+  }, []);
 
   useEffect(() => {
+    const fallbackCenter = { lat: TOKYO_LAT, lng: TOKYO_LNG };
+    let canceled = false;
+
+    fetchNearbyStations(fallbackCenter);
+
     if (!navigator.geolocation) {
-      setState({
-        status: "error",
-        message: "この端末では位置情報を取得できません。"
-      });
       return;
     }
 
     navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const latitude = position.coords.latitude;
-        const longitude = position.coords.longitude;
-
-        try {
-          const response = await fetch(`/api/stations/nearby?lat=${latitude}&lng=${longitude}`);
-          if (!response.ok) {
-            throw new Error("周辺駅の取得に失敗しました。");
-          }
-          const result = (await response.json()) as { stations: NearbyStation[] };
-          setState({ status: "ready", latitude, longitude, stations: result.stations });
-        } catch (error) {
-          setState({
-            status: "error",
-            message: error instanceof Error ? error.message : "周辺駅の取得に失敗しました。"
-          });
+      (position) => {
+        if (!canceled) {
+          fetchNearbyStations({ lat: position.coords.latitude, lng: position.coords.longitude });
         }
       },
       () => {
-        setState({
-          status: "error",
-          message: "位置情報の利用が拒否されました。"
-        });
+        // 位置情報が利用できない場合はフォールバックで東京を維持します。
       },
       { enableHighAccuracy: true }
     );
-  }, []);
+
+    return () => {
+      canceled = true;
+    };
+  }, [fetchNearbyStations]);
 
   const stations = state.status === "ready" ? state.stations : [];
-  const stationGroups = useMemo(() => {
+
+  const stationGroups = useMemo<VisibleGroup[]>(() => {
     const groups = new Map<string, NearbyStation[]>();
-
     for (const station of stations) {
-      if (station.latitude === null || station.longitude === null) {
-        continue;
-      }
-
+      if (station.latitude === null || station.longitude === null) continue;
       const key = `${station.latitude}:${station.longitude}`;
       const group = groups.get(key);
-      if (group) {
-        group.push(station);
-      } else {
-        groups.set(key, [station]);
-      }
+      if (group) group.push(station);
+      else groups.set(key, [station]);
     }
-
     return Array.from(groups.entries()).map(([key, groupedStations]) => ({
       key,
       stations: groupedStations,
@@ -107,18 +169,54 @@ export function LocationMapClient() {
   }, [stations]);
 
   const selectedStation = useMemo(() => {
-    if (!selectedGroupKey) {
-      return null;
-    }
-
+    if (!selectedGroupKey) return null;
     const group = stationGroups.find((entry) => entry.key === selectedGroupKey);
-    if (!group) {
-      return null;
-    }
-
+    if (!group) return null;
     const index = groupIndexes[selectedGroupKey] ?? 0;
     return group.stations[index] ?? group.stations[0] ?? null;
   }, [groupIndexes, selectedGroupKey, stationGroups]);
+
+  const initialCenter: [number, number] = state.status === "ready" ? [state.latitude, state.longitude] : [TOKYO_LAT, TOKYO_LNG];
+  const effectiveMapCenter = mapCenter ?? initialCenter;
+
+  const initialBounds = useMemo(() => {
+    const lat = effectiveMapCenter[0];
+    const lng = effectiveMapCenter[1];
+    const halfWidthKm = 2.5;
+    const latKmPerDeg = 110.574;
+    const lngKmPerDeg = 111.320 * Math.cos((lat * Math.PI) / 180);
+    const latDelta = halfWidthKm / latKmPerDeg;
+    const lngDelta = halfWidthKm / lngKmPerDeg;
+    return [
+      [lat - latDelta, lng - lngDelta],
+      [lat + latDelta, lng + lngDelta]
+    ] as [[number, number], [number, number]];
+  }, [effectiveMapCenter]);
+
+  const visibleGroups = useMemo(() => {
+    const groups = computeVisible(stationGroups, mapBounds ?? initialBounds);
+    return groups.length > 0 ? groups : stationGroups.slice(0, 10);
+  }, [stationGroups, mapBounds, initialBounds]);
+
+  const requestNearby = useCallback(async (center: { lat: number; lng: number }) => {
+    const last = lastRequestedCenterRef.current;
+    if (last && Math.abs(center.lat - last.lat) <= 0.01 && Math.abs(center.lng - last.lng) <= 0.01) {
+      return;
+    }
+
+    lastRequestedCenterRef.current = center;
+    try {
+      const response = await fetch(`/api/stations/nearby?lat=${center.lat}&lng=${center.lng}`);
+      if (!response.ok) {
+        throw new Error("周辺駅の取得に失敗しました。");
+      }
+      const result = (await response.json()) as { stations: NearbyStation[] };
+      setState({ status: "ready", latitude: center.lat, longitude: center.lng, stations: result.stations });
+      setMapCenter([center.lat, center.lng]);
+    } catch {
+      // ignore repeated fetch failures during user interaction.
+    }
+  }, []);
 
   if (state.status === "loading") {
     return (
@@ -135,36 +233,31 @@ export function LocationMapClient() {
     );
   }
 
-  if (state.status === "error") {
-    return (
-      <div className="stack">
-        <div className="inline-meta">
-          <span className="pill">{state.message}</span>
-        </div>
-        <div className="card">
-          <div className="card-inner">
-            <p className="subtle">位置情報を利用できないため、地図を表示できません。</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const mapCenter: [number, number] = [state.latitude, state.longitude];
-
   return (
     <div className="stack">
+      <div className="inline-meta">{state.status === "error" ? <span className="pill">{state.message}</span> : null}</div>
+
       <div className="card map-panel">
-        <MapContainer center={mapCenter} zoom={13} className="map-frame" scrollWheelZoom>
+        <MapContainer
+          key={`${effectiveMapCenter[0]},${effectiveMapCenter[1]}`}
+          center={effectiveMapCenter}
+          zoom={13}
+          className="map-frame"
+          scrollWheelZoom
+          style={{ height: "400px", width: "100%" }}
+        >
           <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            attribution='&copy; <a href="https://carto.com/attributions">CARTO</a> | &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+            subdomains={["a", "b", "c", "d"]}
+            maxZoom={19}
           />
-          <FitMarkers stations={stations} />
-          {stationGroups.map((group) => {
+
+          <MapEvents onBoundsChange={setMapBounds} onRequestNearby={requestNearby} />
+
+          {visibleGroups.map((group) => {
             const index = groupIndexes[group.key] ?? 0;
             const station = group.stations[index] ?? group.stations[0];
-
             return (
               <CircleMarker
                 key={group.key}
@@ -173,23 +266,19 @@ export function LocationMapClient() {
                   click: () => {
                     setSelectedGroupKey(group.key);
                     setGroupIndexes((current) => {
-                      const nextIndex =
-                        selectedGroupKey === group.key
-                          ? ((current[group.key] ?? 0) + 1) % group.stations.length
-                          : 0;
-                      return {
-                        ...current,
-                        [group.key]: nextIndex
-                      };
+                      const nextIndex = selectedGroupKey === group.key ? ((current[group.key] ?? 0) + 1) % group.stations.length : 0;
+                      return { ...current, [group.key]: nextIndex };
                     });
                   }
                 }}
                 pathOptions={{
                   color: station.first_achieved_on ? "#2563eb" : "#dc2626",
                   fillColor: station.first_achieved_on ? "#2563eb" : "#dc2626",
-                  fillOpacity: 0.9
+                  fillOpacity: 0.98,
+                  weight: 2,
+                  opacity: 1
                 }}
-                radius={10}
+                radius={12}
               >
                 <Popup>
                   <strong>{station.name}</strong>
@@ -207,6 +296,7 @@ export function LocationMapClient() {
           })}
         </MapContainer>
       </div>
+
       {selectedStation ? (
         <div className="grid-list">
           <Link className="list-link nearby-station-card" href={`/stations/${selectedStation.id}?from=nearby`}>
@@ -218,11 +308,7 @@ export function LocationMapClient() {
               </div>
               <div className="nearby-record-row">
                 <span className="nearby-record-label">初乗降車日:</span>
-                <span>
-                  {selectedStation.first_achieved_on
-                    ? formatFirstAchievedOn(selectedStation.first_achieved_on)
-                    : "未達成"}
-                </span>
+                <span>{selectedStation.first_achieved_on ? formatFirstAchievedOn(selectedStation.first_achieved_on) : "未達成"}</span>
               </div>
               <div className="nearby-record-row">
                 <span className="nearby-record-label">備考:</span>

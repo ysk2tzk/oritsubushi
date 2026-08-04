@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { DateWheel } from "@/components/date-wheel";
-import { decodeFirstAchievedOn, encodeFirstAchievedOn } from "@/lib/date-code";
+import { DateParts, decodeFirstAchievedOn, encodeFirstAchievedOn } from "@/lib/date-code";
 
 type Props = {
   endpoint: string;
@@ -31,7 +31,24 @@ export function RecordForm({
   const [message, setMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  async function submit(clear: boolean) {
+  function getTodayDateParts(): DateParts {
+    const today = new Date();
+    return {
+      year: String(today.getFullYear()),
+      month: String(today.getMonth() + 1).padStart(2, "0"),
+      day: String(today.getDate()).padStart(2, "0")
+    };
+  }
+
+  function getEmptyDateParts(): DateParts {
+    return { year: "", month: "", day: "" };
+  }
+
+  async function submit(
+    clear: boolean,
+    value?: DateParts,
+    onSuccess?: () => void
+  ) {
     setSubmitting(true);
     setMessage(null);
 
@@ -42,7 +59,7 @@ export function RecordForm({
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          first_achieved_on: clear ? null : encodeFirstAchievedOn(dateValue),
+          first_achieved_on: clear ? null : encodeFirstAchievedOn(value ?? dateValue),
           note
         })
       });
@@ -53,6 +70,9 @@ export function RecordForm({
       }
 
       setMessage(clear ? "記録をクリアしました。" : "記録を更新しました。");
+      if (onSuccess) {
+        onSuccess();
+      }
       router.refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "更新に失敗しました。");
@@ -86,17 +106,35 @@ export function RecordForm({
             </div>
             {message ? <div className="pill">{message}</div> : null}
             <div className="form-actions">
-              <button className="button" disabled={submitting} onClick={() => void submit(false)} type="button">
-                保存する
-              </button>
               <button
-                className="ghost-button"
+                className="button"
                 disabled={submitting}
-                onClick={() => void submit(true)}
+                onClick={() =>
+                  void submit(false, getTodayDateParts(), () => {
+                    setDateValue(getTodayDateParts());
+                  })
+                }
                 type="button"
               >
-                未記録に戻す
+                今日、乗り降りしました
               </button>
+              <div className="form-actions-right">
+                <button
+                  className="ghost-button"
+                  disabled={submitting}
+                  onClick={() =>
+                    void submit(true, undefined, () => {
+                      setDateValue(getEmptyDateParts());
+                    })
+                  }
+                  type="button"
+                >
+                  未記録に戻す
+                </button>
+                <button className="button" disabled={submitting} onClick={() => void submit(false)} type="button">
+                  保存する
+                </button>
+              </div>
             </div>
           </div>
         </div>

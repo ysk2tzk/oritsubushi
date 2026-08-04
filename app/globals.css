@@ -185,17 +185,30 @@ textarea {
   gap: 12px;
 }
 
+.grid-list.columns {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
 .list-link {
   display: grid;
   gap: 4px;
+  align-items: start;
   padding: 16px 18px;
   border-radius: 18px;
   border: 1px solid rgba(217, 202, 176, 0.8);
   background: rgba(255, 250, 241, 0.74);
+  color: inherit;
+  text-decoration: none;
 }
 
 .list-link strong {
   font-size: 1rem;
+}
+
+@media (max-width: 520px) {
+  .grid-list.columns {
+    grid-template-columns: 1fr;
+  }
 }
 
 .nearby-station-card {
@@ -387,6 +400,15 @@ textarea {
 .form-actions {
   display: flex;
   gap: 12px;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.form-actions-right {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .badge-done,
