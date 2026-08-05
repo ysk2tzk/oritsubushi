@@ -19,6 +19,7 @@ export default async function SectionPage({
       endpoint={`/api/sections/${section.id}`}
       title={`${fromStation.name} → ${toStation.name}`}
       noteLabel="備考"
+      todayButtonLabel="今日、乗りました"
       initialFirstAchievedOn={section.first_achieved_on}
       initialNote={section.note}
       breadcrumbs={[

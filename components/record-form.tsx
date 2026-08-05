@@ -11,6 +11,7 @@ type Props = {
   title: string;
   subtitle?: string;
   noteLabel: string;
+  todayButtonLabel?: string;
   initialFirstAchievedOn: string | null;
   initialNote: string | null;
   breadcrumbs?: Array<{ label: string; href?: string }>;
@@ -21,6 +22,7 @@ export function RecordForm({
   title,
   subtitle,
   noteLabel,
+  todayButtonLabel = "今日、乗り降りしました",
   initialFirstAchievedOn,
   initialNote,
   breadcrumbs
@@ -116,7 +118,7 @@ export function RecordForm({
                 }
                 type="button"
               >
-                今日、乗り降りしました
+                {todayButtonLabel}
               </button>
               <div className="form-actions-right">
                 <button
