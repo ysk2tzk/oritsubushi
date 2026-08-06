@@ -30,6 +30,11 @@ export default async function LinePage({
               />
               <h1 className="hero-title">{line.name}</h1>
               <p className="subtle">{company.name}</p>
+              <div>
+                <Link href={`/record/line/${line.id}/sections`} className="button">
+                  複数区間を記録する
+                </Link>
+              </div>
             </div>
           </div>
           <div className="timeline">

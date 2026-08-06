@@ -55,6 +55,11 @@ export type NearbyStation = Station & {
   distance_meters: number;
 };
 
+export type OrderedLinePath = {
+  stations: Station[];
+  sections: Section[];
+};
+
 type TimelineItem =
   | { type: "station"; station: Station }
   | { type: "section"; section: Section };
@@ -258,6 +263,25 @@ export async function getLineTimeline(lineId: number): Promise<{
   return { company, line, items };
 }
 
+export async function getOrderedLinePath(lineId: number): Promise<OrderedLinePath> {
+  const { items } = await getLineTimeline(lineId);
+  const stations: Station[] = [];
+  const sections: Section[] = [];
+
+  for (const item of items) {
+    if (item.type === "station") {
+      if (stations.at(-1)?.id !== item.station.id) {
+        stations.push(item.station);
+      }
+      continue;
+    }
+
+    sections.push(item.section);
+  }
+
+  return { stations, sections };
+}
+
 export async function getStationRecordContext(stationId: number) {
   const station = await getStation(stationId);
   const company = await getCompany(station.company_id);
@@ -303,6 +327,51 @@ export async function updateSectionRecord(
   if (error) {
     throw new Error(error.message);
   }
+}
+
+export async function recordLineSectionsInRange(
+  lineId: number,
+  payload: {
+    fromStationId: number;
+    toStationId: number;
+    firstAchievedOn: string;
+  }
+) {
+  const { stations, sections } = await getOrderedLinePath(lineId);
+  const fromIndex = stations.findIndex((station) => station.id === payload.fromStationId);
+  const toIndex = stations.findIndex((station) => station.id === payload.toStationId);
+
+  if (fromIndex === -1 || toIndex === -1) {
+    throw new Error("駅が見つかりません。");
+  }
+
+  if (fromIndex >= toIndex) {
+    throw new Error("発駅と着駅の選択を見直してください。");
+  }
+
+  const targetSections = sections.slice(fromIndex, toIndex);
+  if (targetSections.length === 0) {
+    return { updatedCount: 0 };
+  }
+
+  const targetSectionIds = targetSections.map((section) => section.id);
+  const supabaseAdmin = getSupabaseAdmin();
+  const sectionQuery = supabaseAdmin.from("mst_section") as any;
+  const { error, count } = await (sectionQuery
+    .update({ first_achieved_on: payload.firstAchievedOn })
+    .in("id", targetSectionIds)
+    .is("first_achieved_on", null)
+    .eq("is_deleted", false)
+    .select("id", { count: "exact", head: true })) as {
+    error: { message?: string } | null;
+    count: number | null;
+  };
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return { updatedCount: count ?? 0 };
 }
 
 function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number) {
