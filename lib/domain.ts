@@ -142,6 +142,20 @@ export async function getStationsByCompany(companyId: number) {
   return ensure(data, error) as Station[];
 }
 
+async function getStationsByIds(stationIds: number[]) {
+  if (stationIds.length === 0) {
+    return [] as Station[];
+  }
+
+  const supabaseAdmin = getSupabaseAdmin();
+  const { data, error } = await supabaseAdmin
+    .from("mst_station")
+    .select("*")
+    .in("id", stationIds)
+    .eq("is_deleted", false);
+  return ensure(data, error) as Station[];
+}
+
 export async function getStation(stationId: number) {
   const supabaseAdmin = getSupabaseAdmin();
   const { data, error } = await supabaseAdmin
@@ -212,13 +226,20 @@ export async function getLineTimeline(lineId: number): Promise<{
   items: TimelineItem[];
 }> {
   const line = await getLine(lineId);
-  const [company, companyStations, sections] = await Promise.all([
+  const [company, sections] = await Promise.all([
     getCompany(line.company_id),
-    getStationsByCompany(line.company_id),
     getSectionsByLine(lineId)
   ]);
 
-  const stationMap = new Map(companyStations.map((station) => [station.id, station]));
+  const stationIds = Array.from(
+    new Set([
+      line.display_start_station_id,
+      ...sections.flatMap((section) => [section.from_station_id, section.to_station_id])
+    ])
+  );
+  const stations = await getStationsByIds(stationIds);
+
+  const stationMap = new Map(stations.map((station) => [station.id, station]));
   const sectionByFrom = new Map(sections.map((section) => [section.from_station_id, section]));
 
   const startStation = stationMap.get(line.display_start_station_id);
