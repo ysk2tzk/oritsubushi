@@ -117,7 +117,7 @@ export async function getLinesByCompany(companyId: number) {
     .select("*")
     .eq("company_id", companyId)
     .eq("is_deleted", false)
-    .order("name");
+    .order("id");
   return ensure(data, error) as Line[];
 }
 
@@ -294,7 +294,8 @@ export async function getSectionRecordContext(sectionId: number) {
     getStation(section.from_station_id),
     getStation(section.to_station_id)
   ]);
-  return { section, fromStation, toStation };
+  const company = await getCompany(fromStation.company_id);
+  return { section, fromStation, toStation, company };
 }
 
 export async function updateStationRecord(

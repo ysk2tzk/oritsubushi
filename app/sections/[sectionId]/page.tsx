@@ -12,7 +12,7 @@ export default async function SectionPage({
 }) {
   const { sectionId } = await params;
   const { from, lineId, lineName } = await searchParams;
-  const { section, fromStation, toStation } = await getSectionRecordContext(Number(sectionId));
+  const { section, fromStation, toStation, company } = await getSectionRecordContext(Number(sectionId));
 
   return (
     <RecordForm
@@ -24,8 +24,8 @@ export default async function SectionPage({
       initialNote={section.note}
       breadcrumbs={[
         { label: "記録するTop", href: "/record" },
-        { label: "会社一覧", href: `/record/company-type/${fromStation.company_id}` },
-        { label: "路線一覧", href: `/record/company/${fromStation.company_id}` },
+        { label: "会社一覧", href: `/record/company-type/${company.company_type}` },
+        { label: "路線一覧", href: `/record/company/${company.id}` },
         ...(from === "line" && lineId && lineName
           ? [{ label: lineName, href: `/record/line/${lineId}` }]
           : []),

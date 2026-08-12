@@ -99,6 +99,7 @@ export function LocationMapClient() {
   const [state, setState] = useState<LocationState>({ status: "loading", stations: [] });
   const [selectedGroupKey, setSelectedGroupKey] = useState<string | null>(null);
   const [groupIndexes, setGroupIndexes] = useState<Record<string, number>>({});
+  const [popupVersion, setPopupVersion] = useState(0);
   const [mapBounds, setMapBounds] = useState<Bounds | null>(null);
   const [mapCenter, setMapCenter] = useState<[number, number] | null>(null);
   const lastRequestedCenterRef = useRef<{ lat: number; lng: number } | null>(null);
@@ -264,11 +265,13 @@ export function LocationMapClient() {
                 center={[group.latitude, group.longitude]}
                 eventHandlers={{
                   click: () => {
+                    const nextIndex =
+                      selectedGroupKey === group.key
+                        ? ((groupIndexes[group.key] ?? 0) + 1) % group.stations.length
+                        : 0;
                     setSelectedGroupKey(group.key);
-                    setGroupIndexes((current) => {
-                      const nextIndex = selectedGroupKey === group.key ? ((current[group.key] ?? 0) + 1) % group.stations.length : 0;
-                      return { ...current, [group.key]: nextIndex };
-                    });
+                    setGroupIndexes((current) => ({ ...current, [group.key]: nextIndex }));
+                    setPopupVersion((current) => current + 1);
                   }
                 }}
                 pathOptions={{
@@ -280,7 +283,7 @@ export function LocationMapClient() {
                 }}
                 radius={12}
               >
-                <Popup>
+                <Popup key={`${group.key}:${index}:${popupVersion}`}>
                   <strong>{station.name}</strong>
                   <div>{station.company_name}</div>
                   {station.note ? <div>備考: {station.note}</div> : null}
@@ -299,7 +302,7 @@ export function LocationMapClient() {
 
       {selectedStation ? (
         <div className="grid-list">
-          <Link className="list-link nearby-station-card" href={`/stations/${selectedStation.id}?from=nearby`}>
+          <div className="list-link nearby-station-card">
             <strong className="nearby-station-name">{selectedStation.name}</strong>
             <div className="nearby-record">
               <div className="nearby-record-row">
@@ -315,7 +318,7 @@ export function LocationMapClient() {
                 <span>{selectedStation.note ? selectedStation.note : "なし"}</span>
               </div>
             </div>
-          </Link>
+          </div>
         </div>
       ) : (
         <div className="card">
