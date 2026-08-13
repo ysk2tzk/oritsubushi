@@ -189,6 +189,15 @@ textarea {
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }
 
+.history-top-actions {
+  display: grid;
+  gap: 12px;
+}
+
+.history-top-action {
+  width: 100%;
+}
+
 .list-link {
   display: grid;
   gap: 4px;

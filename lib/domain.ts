@@ -60,6 +60,30 @@ export type OrderedLinePath = {
   sections: Section[];
 };
 
+export type HistoryYearSummary = {
+  key: string;
+  label: string;
+  count: number;
+};
+
+export type HistoryMonthSummary = {
+  key: string;
+  label: string;
+  count: number;
+};
+
+export type HistoryDaySummary = {
+  key: string;
+  label: string;
+  count: number;
+};
+
+export type HistoryStationSummary = {
+  id: number;
+  name: string;
+  companyName: string;
+};
+
 type TimelineItem =
   | { type: "station"; station: Station }
   | { type: "section"; section: Section };
@@ -77,6 +101,38 @@ function ensureOne<T>(data: T | null, error: { message?: string } | null | undef
     throw new Error("Record not found.");
   }
   return resolved;
+}
+
+async function getAllActiveStationsForHistory(): Promise<
+  Array<Pick<Station, "id" | "name" | "company_id" | "first_achieved_on">>
+> {
+  const supabaseAdmin = getSupabaseAdmin();
+  const pageSize = 1000;
+  const rows: Array<Pick<Station, "id" | "name" | "company_id" | "first_achieved_on">> = [];
+  let from = 0;
+
+  while (true) {
+    const to = from + pageSize - 1;
+    const { data, error } = await supabaseAdmin
+      .from("mst_station")
+      .select("id, name, company_id, first_achieved_on")
+      .eq("is_deleted", false)
+      .not("first_achieved_on", "is", null)
+      .range(from, to);
+
+    const page = (ensure(data, error) ?? []) as Array<
+      Pick<Station, "id" | "name" | "company_id" | "first_achieved_on">
+    >;
+    rows.push(...page);
+
+    if (page.length < pageSize) {
+      break;
+    }
+
+    from += pageSize;
+  }
+
+  return rows;
 }
 
 export async function getCompanyTypes() {
@@ -165,6 +221,221 @@ export async function getStation(stationId: number) {
     .eq("is_deleted", false)
     .single();
   return ensureOne(data, error) as Station;
+}
+
+export async function getStationHistoryYearSummaries(): Promise<{
+  years: HistoryYearSummary[];
+}> {
+  const rows = await getAllActiveStationsForHistory();
+  const summaryMap = new Map<string, number>();
+
+  for (const row of rows) {
+    const code = row.first_achieved_on;
+    if (!code) {
+      continue;
+    }
+
+    const key = code === "99999999" ? "unknown" : code.slice(0, 4);
+    summaryMap.set(key, (summaryMap.get(key) ?? 0) + 1);
+  }
+
+  const years = Array.from(summaryMap.entries())
+    .map(([key, count]) => ({
+      key,
+      label: key === "unknown" ? "不明" : `${key}年`,
+      count
+    }))
+    .sort((a, b) => {
+      if (a.key === "unknown") {
+        return 1;
+      }
+      if (b.key === "unknown") {
+        return -1;
+      }
+      return Number(b.key) - Number(a.key);
+    });
+
+  return { years };
+}
+
+export async function getStationHistoryMonthSummaries(year: string): Promise<{
+  yearLabel: string;
+  months: HistoryMonthSummary[];
+}> {
+  const rows = await getAllActiveStationsForHistory();
+  const summaryMap = new Map<string, number>();
+
+  for (const row of rows) {
+    const code = row.first_achieved_on;
+    if (!code) {
+      continue;
+    }
+
+    if (year === "unknown") {
+      if (code === "99999999") {
+        summaryMap.set("unknown", (summaryMap.get("unknown") ?? 0) + 1);
+      }
+      continue;
+    }
+
+    if (!code.startsWith(year)) {
+      continue;
+    }
+
+    const month = code.slice(4, 6);
+    const key = month === "99" ? "unknown" : month;
+    summaryMap.set(key, (summaryMap.get(key) ?? 0) + 1);
+  }
+
+  const months = Array.from(summaryMap.entries())
+    .map(([key, count]) => ({
+      key,
+      label: key === "unknown" ? "不明" : `${Number(key)}月`,
+      count
+    }))
+    .sort((a, b) => {
+      if (a.key === "unknown") {
+        return 1;
+      }
+      if (b.key === "unknown") {
+        return -1;
+      }
+      return Number(b.key) - Number(a.key);
+    });
+
+  return {
+    yearLabel: year === "unknown" ? "不明" : `${year}年`,
+    months
+  };
+}
+
+export async function getStationsByUnknownHistoryYear(): Promise<HistoryStationSummary[]> {
+  const supabaseAdmin = getSupabaseAdmin();
+  const [stationsData, { data: companiesData, error: companiesError }] = await Promise.all([
+    getAllActiveStationsForHistory(),
+    supabaseAdmin.from("mst_company").select("id, name").eq("is_deleted", false)
+  ]);
+
+  const stations = stationsData.filter((station) => station.first_achieved_on === "99999999");
+  const companies = (ensure(companiesData, companiesError) ?? []) as Array<Pick<Company, "id" | "name">>;
+  const companyMap = new Map(companies.map((company) => [company.id, company.name]));
+
+  return stations.map((station) => ({
+    id: station.id,
+    name: station.name,
+    companyName: companyMap.get(station.company_id) ?? "会社不明"
+  }));
+}
+
+export async function getStationHistoryDaySummaries(year: string, month: string): Promise<{
+  yearLabel: string;
+  monthLabel: string;
+  days: HistoryDaySummary[];
+}> {
+  const rows = await getAllActiveStationsForHistory();
+  const summaryMap = new Map<string, number>();
+
+  for (const row of rows) {
+    const code = row.first_achieved_on;
+    if (!code || code === "99999999") {
+      continue;
+    }
+
+    if (!code.startsWith(year)) {
+      continue;
+    }
+
+    const rowMonth = code.slice(4, 6);
+    if (month === "unknown") {
+      if (rowMonth === "99") {
+        summaryMap.set("unknown", (summaryMap.get("unknown") ?? 0) + 1);
+      }
+      continue;
+    }
+
+    if (rowMonth !== month) {
+      continue;
+    }
+
+    const day = code.slice(6, 8);
+    const key = day === "99" ? "unknown" : day;
+    summaryMap.set(key, (summaryMap.get(key) ?? 0) + 1);
+  }
+
+  const days = Array.from(summaryMap.entries())
+    .map(([key, count]) => ({
+      key,
+      label: key === "unknown" ? "不明" : `${Number(key)}日`,
+      count
+    }))
+    .sort((a, b) => {
+      if (a.key === "unknown") {
+        return 1;
+      }
+      if (b.key === "unknown") {
+        return -1;
+      }
+      return Number(a.key) - Number(b.key);
+    });
+
+  return {
+    yearLabel: `${year}年`,
+    monthLabel: month === "unknown" ? "不明" : `${Number(month)}月`,
+    days
+  };
+}
+
+export async function getStationsByHistoryDate(
+  year: string,
+  month: string,
+  day: string
+): Promise<{
+  yearLabel: string;
+  monthLabel: string;
+  dayLabel: string;
+  stations: HistoryStationSummary[];
+}> {
+  const supabaseAdmin = getSupabaseAdmin();
+  const [stations, { data: companiesData, error: companiesError }] = await Promise.all([
+    getAllActiveStationsForHistory(),
+    supabaseAdmin.from("mst_company").select("id, name").eq("is_deleted", false)
+  ]);
+  const companies = (ensure(companiesData, companiesError) ?? []) as Array<Pick<Company, "id" | "name">>;
+  const companyMap = new Map(companies.map((company) => [company.id, company.name]));
+
+  const filtered = stations.filter((station) => {
+    const code = station.first_achieved_on;
+    if (!code || code === "99999999" || !code.startsWith(year)) {
+      return false;
+    }
+
+    const rowMonth = code.slice(4, 6);
+    if (month === "unknown") {
+      return rowMonth === "99";
+    }
+
+    if (rowMonth !== month) {
+      return false;
+    }
+
+    const rowDay = code.slice(6, 8);
+    if (day === "unknown") {
+      return rowDay === "99";
+    }
+
+    return rowDay === day;
+  });
+
+  return {
+    yearLabel: `${year}年`,
+    monthLabel: month === "unknown" ? "不明" : `${Number(month)}月`,
+    dayLabel: day === "unknown" ? "不明" : `${Number(day)}日`,
+    stations: filtered.map((station) => ({
+      id: station.id,
+      name: station.name,
+      companyName: companyMap.get(station.company_id) ?? "会社不明"
+    }))
+  };
 }
 
 export async function getSection(sectionId: number) {

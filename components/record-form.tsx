@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { BottomTabs } from "@/components/bottom-tabs";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { DateWheel } from "@/components/date-wheel";
 import { DateParts, decodeFirstAchievedOn, encodeFirstAchievedOn } from "@/lib/date-code";
@@ -84,63 +85,66 @@ export function RecordForm({
   }
 
   return (
-    <div className="shell">
-      <div className="stack">
-        <div className="card">
-          <div className="card-inner stack">
-            {breadcrumbs && breadcrumbs.length > 0 ? <Breadcrumbs items={breadcrumbs} /> : null}
-            <div>
-              <h1 className="hero-title">{title}</h1>
-              {subtitle ? <p className="subtle">{subtitle}</p> : null}
-            </div>
-            <fieldset className="field" style={{ border: "none", padding: 0, margin: 0 }}>
-              <legend>初回達成日</legend>
-              <DateWheel value={dateValue} onChange={setDateValue} />
-            </fieldset>
-            <div className="field">
-              <label htmlFor="note">{noteLabel}</label>
-              <textarea
-                id="note"
-                value={note}
-                onChange={(event) => setNote(event.target.value)}
-                placeholder="備考を入力"
-              />
-            </div>
-            {message ? <div className="pill">{message}</div> : null}
-            <div className="form-actions">
-              <button
-                className="button"
-                disabled={submitting}
-                onClick={() =>
-                  void submit(false, getTodayDateParts(), () => {
-                    setDateValue(getTodayDateParts());
-                  })
-                }
-                type="button"
-              >
-                {todayButtonLabel}
-              </button>
-              <div className="form-actions-right">
+    <>
+      <div className="shell">
+        <div className="stack">
+          <div className="card">
+            <div className="card-inner stack">
+              {breadcrumbs && breadcrumbs.length > 0 ? <Breadcrumbs items={breadcrumbs} /> : null}
+              <div>
+                <h1 className="hero-title">{title}</h1>
+                {subtitle ? <p className="subtle">{subtitle}</p> : null}
+              </div>
+              <fieldset className="field" style={{ border: "none", padding: 0, margin: 0 }}>
+                <legend>初回達成日</legend>
+                <DateWheel value={dateValue} onChange={setDateValue} />
+              </fieldset>
+              <div className="field">
+                <label htmlFor="note">{noteLabel}</label>
+                <textarea
+                  id="note"
+                  value={note}
+                  onChange={(event) => setNote(event.target.value)}
+                  placeholder="備考を入力"
+                />
+              </div>
+              {message ? <div className="pill">{message}</div> : null}
+              <div className="form-actions">
                 <button
-                  className="ghost-button"
+                  className="button"
                   disabled={submitting}
                   onClick={() =>
-                    void submit(true, undefined, () => {
-                      setDateValue(getEmptyDateParts());
+                    void submit(false, getTodayDateParts(), () => {
+                      setDateValue(getTodayDateParts());
                     })
                   }
                   type="button"
                 >
-                  未記録に戻す
+                  {todayButtonLabel}
                 </button>
-                <button className="button" disabled={submitting} onClick={() => void submit(false)} type="button">
-                  保存する
-                </button>
+                <div className="form-actions-right">
+                  <button
+                    className="ghost-button"
+                    disabled={submitting}
+                    onClick={() =>
+                      void submit(true, undefined, () => {
+                        setDateValue(getEmptyDateParts());
+                      })
+                    }
+                    type="button"
+                  >
+                    未記録に戻す
+                  </button>
+                  <button className="button" disabled={submitting} onClick={() => void submit(false)} type="button">
+                    保存する
+                  </button>
+                </div>
               </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
+      <BottomTabs activeHref="/record" />
+    </>
   );
 }

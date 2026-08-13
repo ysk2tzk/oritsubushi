@@ -9,15 +9,16 @@ const tabs = [
   { href: "/history", label: "記録を見る" }
 ];
 
-export function BottomTabs() {
+export function BottomTabs({ activeHref }: { activeHref?: string }) {
   const pathname = usePathname();
 
   return (
     <div className="bottom-tabs">
       <nav aria-label="下部タブ">
         {tabs.map((tab) => {
-          const active =
-            tab.href === "/"
+          const active = activeHref
+            ? tab.href === activeHref
+            : tab.href === "/"
               ? pathname === "/"
               : pathname === tab.href || pathname.startsWith(`${tab.href}/`);
 
