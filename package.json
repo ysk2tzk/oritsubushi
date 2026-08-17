@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "backfill:station-prefectures": "node scripts/backfill-station-prefectures.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.54.0",
