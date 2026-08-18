@@ -73,10 +73,7 @@ textarea {
 }
 
 .line-header-card {
-  position: sticky;
-  top: 10px;
-  z-index: 20;
-  backdrop-filter: blur(14px);
+  flex-shrink: 0;
 }
 
 .line-header .subtle {
@@ -196,6 +193,21 @@ textarea {
 
 .history-top-action {
   width: 100%;
+}
+
+.history-export-control {
+  display: grid;
+  gap: 6px;
+}
+
+.history-export-message,
+.history-export-error {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.history-export-error {
+  color: var(--danger);
 }
 
 .prefecture-header-card {
@@ -367,6 +379,24 @@ textarea {
 .timeline {
   display: grid;
   gap: 10px;
+}
+
+.record-line-layout {
+  height: calc(100vh - 116px);
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.record-line-layout .timeline {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding: 2px 4px 8px 0;
+}
+
+.record-line-layout .timeline::-webkit-scrollbar {
+  display: none;
 }
 
 .station-row,

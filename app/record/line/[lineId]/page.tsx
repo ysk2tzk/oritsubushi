@@ -2,7 +2,7 @@ import Link from "next/link";
 import { BottomTabs } from "@/components/bottom-tabs";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { formatFirstAchievedOn } from "@/lib/date-code";
-import { getLineTimeline } from "@/lib/domain";
+import { getCompanyType, getDisplayCompanyTypeName, getLineTimeline } from "@/lib/domain";
 
 export const dynamic = "force-dynamic";
 
@@ -13,17 +13,22 @@ export default async function LinePage({
 }) {
   const { lineId } = await params;
   const { company, line, items } = await getLineTimeline(Number(lineId));
+  const companyType = await getCompanyType(company.company_type);
+  const companyTypeName = getDisplayCompanyTypeName(companyType.name);
 
   return (
     <>
       <main className="shell">
-        <div className="stack">
+        <div className="stack record-line-layout">
           <div className="card line-header-card">
             <div className="card-inner stack line-header">
               <Breadcrumbs
                 items={[
                   { label: "記録するTop", href: "/record" },
-                  { label: "会社一覧", href: `/record/company-type/${company.company_type}` },
+                  {
+                    label: `${companyTypeName}会社一覧`,
+                    href: `/record/company-type/${company.company_type}`
+                  },
                   { label: "路線一覧", href: `/record/company/${company.id}` },
                   { label: line.name }
                 ]}

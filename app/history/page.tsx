@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { BottomTabs } from "@/components/bottom-tabs";
 import { Breadcrumbs } from "@/components/breadcrumbs";
+import { HistoryExportButton } from "@/components/history-export-button";
 
 export default function HistoryTopPage() {
   return (
@@ -21,9 +22,7 @@ export default function HistoryTopPage() {
               <Link className="button history-top-action" href="/history/prefecture">
                 都道府県別
               </Link>
-              <button className="ghost-button history-top-action" type="button" disabled>
-                乗降車記録出力
-              </button>
+              <HistoryExportButton />
             </div>
           </div>
         </div>

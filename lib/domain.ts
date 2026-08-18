@@ -98,6 +98,36 @@ export type HistoryPrefectureSummary = {
   totalCount: number;
 };
 
+export type StationRecordExportItem =
+  | {
+      type: "station";
+      name: string;
+      firstAchievedOn: string | null;
+      note: string | null;
+    }
+  | {
+      type: "section";
+      distance: number | null;
+      firstAchievedOn: string | null;
+      note: string | null;
+    };
+
+export type StationRecordExportLine = {
+  companyId: number;
+  id: number;
+  name: string;
+  companyName: string;
+  companyType: number;
+  items: StationRecordExportItem[];
+};
+
+export type StationRecordExportSheet = {
+  key: string;
+  name: string;
+  companyIds: number[];
+  lines: StationRecordExportLine[];
+};
+
 type TimelineItem =
   | { type: "station"; station: Station }
   | { type: "section"; section: Section };
@@ -177,6 +207,115 @@ function ensureOne<T>(data: T | null, error: { message?: string } | null | undef
   return resolved;
 }
 
+async function fetchAllRows<T>(tableName: string): Promise<T[]> {
+  const supabaseAdmin = getSupabaseAdmin();
+  const pageSize = 1000;
+  const rows: T[] = [];
+  let from = 0;
+
+  while (true) {
+    const to = from + pageSize - 1;
+    const { data, error } = await supabaseAdmin
+      .from(tableName)
+      .select("*")
+      .eq("is_deleted", false)
+      .order("id", { ascending: true })
+      .range(from, to);
+
+    const page = (ensure(data, error) ?? []) as T[];
+    rows.push(...page);
+
+    if (page.length < pageSize) {
+      break;
+    }
+
+    from += pageSize;
+  }
+
+  return rows;
+}
+
+function buildLineTimelineItems(
+  line: Line,
+  stationsById: Map<number, Station>,
+  sectionsByLineId: Map<number, Section[]>,
+  options?: { allowEmptyStart?: boolean }
+): TimelineItem[] {
+  const sections = sectionsByLineId.get(line.id) ?? [];
+  const sectionByFrom = new Map(sections.map((section) => [section.from_station_id, section]));
+  const startStation =
+    stationsById.get(line.display_start_station_id) ??
+    resolveLineStartStation(sections, stationsById);
+
+  if (!startStation) {
+    if (options?.allowEmptyStart) {
+      return [];
+    }
+    throw new Error(`Line ${line.id} start station ${line.display_start_station_id} not found.`);
+  }
+
+  const visitedStations = new Set<number>();
+  const visitedSections = new Set<number>();
+  const items: TimelineItem[] = [];
+  let currentStation = startStation;
+
+  while (currentStation) {
+    items.push({ type: "station", station: currentStation });
+    visitedStations.add(currentStation.id);
+
+    const nextSection = sectionByFrom.get(currentStation.id);
+    if (!nextSection || visitedSections.has(nextSection.id)) {
+      break;
+    }
+
+    items.push({ type: "section", section: nextSection });
+    visitedSections.add(nextSection.id);
+
+    const nextStation = stationsById.get(nextSection.to_station_id);
+    if (!nextStation) {
+      break;
+    }
+
+    if (nextStation.id === startStation.id) {
+      items.push({ type: "station", station: nextStation });
+      break;
+    }
+
+    if (visitedStations.has(nextStation.id)) {
+      break;
+    }
+
+    currentStation = nextStation;
+  }
+
+  return items;
+}
+
+function resolveLineStartStation(sections: Section[], stationsById: Map<number, Station>) {
+  if (sections.length === 0) {
+    return null;
+  }
+
+  const toStationIds = new Set(sections.map((section) => section.to_station_id));
+  const startCandidate =
+    sections.find(
+      (section) =>
+        stationsById.has(section.from_station_id) && !toStationIds.has(section.from_station_id)
+    ) ??
+    sections.find((section) => stationsById.has(section.from_station_id)) ??
+    sections.find((section) => stationsById.has(section.to_station_id));
+
+  if (!startCandidate) {
+    return null;
+  }
+
+  return (
+    stationsById.get(startCandidate.from_station_id) ??
+    stationsById.get(startCandidate.to_station_id) ??
+    null
+  );
+}
+
 async function getHistoryStationSnapshots(): Promise<HistoryStationSnapshot[]> {
   const supabaseAdmin = getSupabaseAdmin();
   const pageSize = 1000;
@@ -246,14 +385,33 @@ export async function getCompanyTypes() {
   return ensure(data, error) as CompanyType[];
 }
 
-export async function getCompaniesByType(companyTypeId: number) {
+export async function getCompanyType(companyTypeId: number) {
   const supabaseAdmin = getSupabaseAdmin();
   const { data, error } = await supabaseAdmin
+    .from("mst_company_type")
+    .select("id, name")
+    .eq("id", companyTypeId)
+    .single();
+  return ensureOne(data, error) as CompanyType;
+}
+
+export function getDisplayCompanyTypeName(companyTypeName: string) {
+  return companyTypeName.replace(/\s*\(1路線のみ\)$/, "");
+}
+
+export async function getCompaniesByType(companyTypeId: number) {
+  const supabaseAdmin = getSupabaseAdmin();
+  const query = supabaseAdmin
     .from("mst_company")
     .select("*")
     .eq("is_deleted", false)
-    .eq("company_type", companyTypeId)
     .order("name");
+
+  const { data, error } =
+    companyTypeId === 3
+      ? await query.in("company_type", [3, 5])
+      : await query.eq("company_type", companyTypeId);
+
   return ensure(data, error) as Company[];
 }
 
@@ -685,49 +843,19 @@ export async function getLineTimeline(lineId: number): Promise<{
   );
   const stations = await getStationsByIds(stationIds);
 
-  const stationMap = new Map(stations.map((station) => [station.id, station]));
-  const sectionByFrom = new Map(sections.map((section) => [section.from_station_id, section]));
-
-  const startStation = stationMap.get(line.display_start_station_id);
-  if (!startStation) {
+  try {
+    return {
+      company,
+      line,
+      items: buildLineTimelineItems(
+        line,
+        new Map(stations.map((station) => [station.id, station])),
+        new Map([[line.id, sections]])
+      )
+    };
+  } catch {
     notFound();
   }
-
-  const visitedStations = new Set<number>();
-  const visitedSections = new Set<number>();
-  const items: TimelineItem[] = [];
-  let currentStation = startStation;
-
-  while (currentStation) {
-    items.push({ type: "station", station: currentStation });
-    visitedStations.add(currentStation.id);
-
-    const nextSection = sectionByFrom.get(currentStation.id);
-    if (!nextSection || visitedSections.has(nextSection.id)) {
-      break;
-    }
-
-    items.push({ type: "section", section: nextSection });
-    visitedSections.add(nextSection.id);
-
-    const nextStation = stationMap.get(nextSection.to_station_id);
-    if (!nextStation) {
-      break;
-    }
-
-    if (nextStation.id === startStation.id) {
-      items.push({ type: "station", station: nextStation });
-      break;
-    }
-
-    if (visitedStations.has(nextStation.id)) {
-      break;
-    }
-
-    currentStation = nextStation;
-  }
-
-  return { company, line, items };
 }
 
 export async function getOrderedLinePath(lineId: number): Promise<OrderedLinePath> {
@@ -840,6 +968,123 @@ export async function recordLineSectionsInRange(
   }
 
   return { updatedCount: count ?? 0 };
+}
+
+export async function getStationRecordExportSheets(): Promise<StationRecordExportSheet[]> {
+  const [companies, lines, stations, sections] = await Promise.all([
+    fetchAllRows<Company>("mst_company"),
+    fetchAllRows<Line>("mst_line"),
+    fetchAllRows<Station>("mst_station"),
+    fetchAllRows<Section>("mst_section")
+  ]);
+
+  const stationsById = new Map(stations.map((station) => [station.id, station]));
+  const sectionsByLineId = new Map<number, Section[]>();
+  for (const section of sections) {
+    const lineSections = sectionsByLineId.get(section.line_id);
+    if (lineSections) {
+      lineSections.push(section);
+    } else {
+      sectionsByLineId.set(section.line_id, [section]);
+    }
+  }
+
+  const linesByCompanyId = new Map<number, Line[]>();
+  for (const line of lines) {
+    const companyLines = linesByCompanyId.get(line.company_id);
+    if (companyLines) {
+      companyLines.push(line);
+    } else {
+      linesByCompanyId.set(line.company_id, [line]);
+    }
+  }
+
+  const buildLineExport = (line: Line, company: Company): StationRecordExportLine => ({
+    companyId: company.id,
+    id: line.id,
+    name: line.name,
+    companyName: company.name,
+    companyType: company.company_type,
+    items: buildLineTimelineItems(line, stationsById, sectionsByLineId, {
+      allowEmptyStart: true
+    }).map((item) =>
+      item.type === "station"
+        ? {
+            type: "station",
+            name: item.station.name,
+            firstAchievedOn: item.station.first_achieved_on,
+            note: item.station.note
+          }
+        : {
+            type: "section",
+            distance: item.section.distance,
+            firstAchievedOn: item.section.first_achieved_on,
+            note: item.section.note
+          }
+    )
+  });
+  const compareExportLines = (a: StationRecordExportLine, b: StationRecordExportLine) =>
+    a.companyType === 5 && b.companyType === 5
+      ? a.companyId - b.companyId || a.id - b.id
+      : a.id - b.id;
+
+  const sheets: StationRecordExportSheet[] = [];
+  let otherSheet: StationRecordExportSheet | null = null;
+  const exportedCompanyIds = new Set<number>();
+
+  for (const company of companies.sort((a, b) => a.company_type - b.company_type || a.id - b.id)) {
+    exportedCompanyIds.add(company.id);
+    const companyLines = (linesByCompanyId.get(company.id) ?? []).sort((a, b) => a.id - b.id);
+
+    if (company.company_type === 5) {
+      if (!otherSheet) {
+        otherSheet = {
+          key: "other",
+          name: "その他",
+          companyIds: [],
+          lines: []
+        };
+        sheets.push(otherSheet);
+      }
+
+      otherSheet.companyIds.push(company.id);
+      otherSheet.lines.push(...companyLines.map((line) => buildLineExport(line, company)));
+      otherSheet.lines.sort(compareExportLines);
+      continue;
+    }
+
+    sheets.push({
+      key: `company-${company.id}`,
+      name: company.name,
+      companyIds: [company.id],
+      lines: companyLines.map((line) => buildLineExport(line, company))
+    });
+  }
+
+  const orphanCompanyIds = Array.from(linesByCompanyId.keys())
+    .filter((companyId) => !exportedCompanyIds.has(companyId))
+    .sort((a, b) => a - b);
+
+  for (const companyId of orphanCompanyIds) {
+    const companyLines = (linesByCompanyId.get(companyId) ?? []).sort((a, b) => a.id - b.id);
+    sheets.push({
+      key: `company-missing-${companyId}`,
+      name: `会社不明_${companyId}`,
+      companyIds: [companyId],
+      lines: companyLines.map((line) =>
+        buildLineExport(line, {
+          id: companyId,
+          revision: 0,
+          company_type: 0,
+          name: `会社不明(${companyId})`,
+          note: null,
+          is_deleted: false
+        })
+      )
+    });
+  }
+
+  return sheets;
 }
 
 function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number) {

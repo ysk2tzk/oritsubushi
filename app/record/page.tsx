@@ -6,7 +6,7 @@ import { getCompanyTypes } from "@/lib/domain";
 export const dynamic = "force-dynamic";
 
 export default async function RecordPage() {
-  const companyTypes = await getCompanyTypes();
+  const companyTypes = (await getCompanyTypes()).filter((companyType) => companyType.id <= 4);
 
   return (
     <>

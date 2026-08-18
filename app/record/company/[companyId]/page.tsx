@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { BottomTabs } from "@/components/bottom-tabs";
 import { Breadcrumbs } from "@/components/breadcrumbs";
-import { getCompany, getLinesByCompany } from "@/lib/domain";
+import { getCompany, getCompanyType, getDisplayCompanyTypeName, getLinesByCompany } from "@/lib/domain";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +12,12 @@ export default async function CompanyPage({
 }) {
   const { companyId } = await params;
   const id = Number(companyId);
-  const [company, lines] = await Promise.all([getCompany(id), getLinesByCompany(id)]);
+  const company = await getCompany(id);
+  const [companyType, lines] = await Promise.all([
+    getCompanyType(company.company_type),
+    getLinesByCompany(id)
+  ]);
+  const companyTypeName = getDisplayCompanyTypeName(companyType.name);
 
   return (
     <>
@@ -23,7 +28,10 @@ export default async function CompanyPage({
               <Breadcrumbs
                 items={[
                   { label: "記録するTop", href: "/record" },
-                  { label: "会社一覧", href: `/record/company-type/${company.company_type}` },
+                  {
+                    label: `${companyTypeName}会社一覧`,
+                    href: `/record/company-type/${company.company_type}`
+                  },
                   { label: "路線一覧" }
                 ]}
               />

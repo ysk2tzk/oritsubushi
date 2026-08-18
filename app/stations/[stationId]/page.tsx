@@ -1,5 +1,5 @@
 import { RecordForm } from "@/components/record-form";
-import { getStationRecordContext } from "@/lib/domain";
+import { getCompanyType, getDisplayCompanyTypeName, getStationRecordContext } from "@/lib/domain";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +13,9 @@ export default async function StationPage({
   const { stationId } = await params;
   const { from, lineId, lineName } = await searchParams;
   const { station, company } = await getStationRecordContext(Number(stationId));
+  const companyType = from === "nearby" ? null : await getCompanyType(company.company_type);
+  const companyTypeName =
+    companyType === null ? "会社種別" : getDisplayCompanyTypeName(companyType.name);
   const breadcrumbs =
     from === "nearby"
       ? [
@@ -21,7 +24,10 @@ export default async function StationPage({
         ]
       : [
           { label: "記録するTop", href: "/record" },
-          { label: "会社一覧", href: `/record/company-type/${company.company_type}` },
+          {
+            label: `${companyTypeName}会社一覧`,
+            href: `/record/company-type/${company.company_type}`
+          },
           { label: "路線一覧", href: `/record/company/${company.id}` },
           ...(lineId && lineName
             ? [{ label: lineName, href: `/record/line/${lineId}` }]
