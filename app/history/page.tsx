@@ -18,9 +18,9 @@ export default function HistoryTopPage() {
               <Link className="button history-top-action" href="/history/date">
                 日付別
               </Link>
-              <button className="ghost-button history-top-action" type="button" disabled>
+              <Link className="button history-top-action" href="/history/prefecture">
                 都道府県別
-              </button>
+              </Link>
               <button className="ghost-button history-top-action" type="button" disabled>
                 乗降車記録出力
               </button>

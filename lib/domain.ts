@@ -32,6 +32,7 @@ export type Station = {
   company_id: number;
   is_shinkansen: boolean;
   first_achieved_on: string | null;
+  prefecture: string | null;
   latitude: number | null;
   longitude: number | null;
   note: string | null;
@@ -82,11 +83,84 @@ export type HistoryStationSummary = {
   id: number;
   name: string;
   companyName: string;
+  isShinkansen: boolean;
+  note: string | null;
+};
+
+export type HistoryPrefectureStationSummary = HistoryStationSummary & {
+  isAchieved: boolean;
+};
+
+export type HistoryPrefectureSummary = {
+  key: string;
+  label: string;
+  achievedCount: number;
+  totalCount: number;
 };
 
 type TimelineItem =
   | { type: "station"; station: Station }
   | { type: "section"; section: Section };
+
+type HistoryStationSnapshot = {
+  id: number;
+  company_id: number;
+  prefecture: string | null;
+  name: string;
+  first_achieved_on: string | null;
+  is_shinkansen: boolean;
+  note: string | null;
+};
+
+const PREFECTURES: string[] = [
+  "北海道",
+  "青森県",
+  "岩手県",
+  "宮城県",
+  "秋田県",
+  "山形県",
+  "福島県",
+  "茨城県",
+  "栃木県",
+  "群馬県",
+  "埼玉県",
+  "千葉県",
+  "東京都",
+  "神奈川県",
+  "新潟県",
+  "富山県",
+  "石川県",
+  "福井県",
+  "山梨県",
+  "長野県",
+  "岐阜県",
+  "静岡県",
+  "愛知県",
+  "三重県",
+  "滋賀県",
+  "京都府",
+  "大阪府",
+  "兵庫県",
+  "奈良県",
+  "和歌山県",
+  "鳥取県",
+  "島根県",
+  "岡山県",
+  "広島県",
+  "山口県",
+  "徳島県",
+  "香川県",
+  "愛媛県",
+  "高知県",
+  "福岡県",
+  "佐賀県",
+  "長崎県",
+  "熊本県",
+  "大分県",
+  "宮崎県",
+  "鹿児島県",
+  "沖縄県"
+];
 
 function ensure<T>(data: T | null, error: { message?: string } | null | undefined) {
   if (error) {
@@ -103,26 +177,22 @@ function ensureOne<T>(data: T | null, error: { message?: string } | null | undef
   return resolved;
 }
 
-async function getAllActiveStationsForHistory(): Promise<
-  Array<Pick<Station, "id" | "name" | "company_id" | "first_achieved_on">>
-> {
+async function getHistoryStationSnapshots(): Promise<HistoryStationSnapshot[]> {
   const supabaseAdmin = getSupabaseAdmin();
   const pageSize = 1000;
-  const rows: Array<Pick<Station, "id" | "name" | "company_id" | "first_achieved_on">> = [];
+  const rows: Station[] = [];
   let from = 0;
 
   while (true) {
     const to = from + pageSize - 1;
     const { data, error } = await supabaseAdmin
       .from("mst_station")
-      .select("id, name, company_id, first_achieved_on")
-      .eq("is_deleted", false)
-      .not("first_achieved_on", "is", null)
+      .select("*")
+      .order("id", { ascending: true })
+      .order("revision", { ascending: true })
       .range(from, to);
 
-    const page = (ensure(data, error) ?? []) as Array<
-      Pick<Station, "id" | "name" | "company_id" | "first_achieved_on">
-    >;
+    const page = (ensure(data, error) ?? []) as Station[];
     rows.push(...page);
 
     if (page.length < pageSize) {
@@ -132,7 +202,39 @@ async function getAllActiveStationsForHistory(): Promise<
     from += pageSize;
   }
 
-  return rows;
+  const grouped = new Map<number, Station[]>();
+  for (const row of rows) {
+    const group = grouped.get(row.id);
+    if (group) {
+      group.push(row);
+    } else {
+      grouped.set(row.id, [row]);
+    }
+  }
+
+  const snapshots: HistoryStationSnapshot[] = [];
+
+  for (const revisions of grouped.values()) {
+    const currentRevision = revisions.find((revision) => revision.is_deleted === false);
+    if (!currentRevision) {
+      continue;
+    }
+
+    const firstAchievedRevision = revisions.find((revision) => revision.first_achieved_on !== null);
+    const displayRevision = firstAchievedRevision ?? currentRevision;
+
+    snapshots.push({
+      id: currentRevision.id,
+      company_id: currentRevision.company_id,
+      prefecture: currentRevision.prefecture,
+      name: displayRevision.name,
+      first_achieved_on: displayRevision.first_achieved_on,
+      is_shinkansen: displayRevision.is_shinkansen,
+      note: displayRevision.note
+    });
+  }
+
+  return snapshots;
 }
 
 export async function getCompanyTypes() {
@@ -226,7 +328,7 @@ export async function getStation(stationId: number) {
 export async function getStationHistoryYearSummaries(): Promise<{
   years: HistoryYearSummary[];
 }> {
-  const rows = await getAllActiveStationsForHistory();
+  const rows = (await getHistoryStationSnapshots()).filter((row) => row.first_achieved_on !== null);
   const summaryMap = new Map<string, number>();
 
   for (const row of rows) {
@@ -262,7 +364,7 @@ export async function getStationHistoryMonthSummaries(year: string): Promise<{
   yearLabel: string;
   months: HistoryMonthSummary[];
 }> {
-  const rows = await getAllActiveStationsForHistory();
+  const rows = (await getHistoryStationSnapshots()).filter((row) => row.first_achieved_on !== null);
   const summaryMap = new Map<string, number>();
 
   for (const row of rows) {
@@ -312,7 +414,7 @@ export async function getStationHistoryMonthSummaries(year: string): Promise<{
 export async function getStationsByUnknownHistoryYear(): Promise<HistoryStationSummary[]> {
   const supabaseAdmin = getSupabaseAdmin();
   const [stationsData, { data: companiesData, error: companiesError }] = await Promise.all([
-    getAllActiveStationsForHistory(),
+    getHistoryStationSnapshots(),
     supabaseAdmin.from("mst_company").select("id, name").eq("is_deleted", false)
   ]);
 
@@ -320,11 +422,15 @@ export async function getStationsByUnknownHistoryYear(): Promise<HistoryStationS
   const companies = (ensure(companiesData, companiesError) ?? []) as Array<Pick<Company, "id" | "name">>;
   const companyMap = new Map(companies.map((company) => [company.id, company.name]));
 
-  return stations.map((station) => ({
-    id: station.id,
-    name: station.name,
-    companyName: companyMap.get(station.company_id) ?? "会社不明"
-  }));
+  return stations
+    .sort((a, b) => a.id - b.id)
+    .map((station) => ({
+      id: station.id,
+      name: station.name,
+      companyName: companyMap.get(station.company_id) ?? "会社不明",
+      isShinkansen: station.is_shinkansen,
+      note: station.note
+    }));
 }
 
 export async function getStationHistoryDaySummaries(year: string, month: string): Promise<{
@@ -332,7 +438,7 @@ export async function getStationHistoryDaySummaries(year: string, month: string)
   monthLabel: string;
   days: HistoryDaySummary[];
 }> {
-  const rows = await getAllActiveStationsForHistory();
+  const rows = (await getHistoryStationSnapshots()).filter((row) => row.first_achieved_on !== null);
   const summaryMap = new Map<string, number>();
 
   for (const row of rows) {
@@ -397,7 +503,7 @@ export async function getStationsByHistoryDate(
 }> {
   const supabaseAdmin = getSupabaseAdmin();
   const [stations, { data: companiesData, error: companiesError }] = await Promise.all([
-    getAllActiveStationsForHistory(),
+    getHistoryStationSnapshots(),
     supabaseAdmin.from("mst_company").select("id, name").eq("is_deleted", false)
   ]);
   const companies = (ensure(companiesData, companiesError) ?? []) as Array<Pick<Company, "id" | "name">>;
@@ -430,10 +536,79 @@ export async function getStationsByHistoryDate(
     yearLabel: `${year}年`,
     monthLabel: month === "unknown" ? "不明" : `${Number(month)}月`,
     dayLabel: day === "unknown" ? "不明" : `${Number(day)}日`,
+    stations: filtered
+      .sort((a, b) => a.id - b.id)
+      .map((station) => ({
+        id: station.id,
+        name: station.name,
+        companyName: companyMap.get(station.company_id) ?? "会社不明",
+        isShinkansen: station.is_shinkansen,
+        note: station.note
+      }))
+  };
+}
+
+export async function getStationHistoryPrefectureSummaries(): Promise<{
+  prefectures: HistoryPrefectureSummary[];
+}> {
+  const rows = (await getHistoryStationSnapshots()).filter((row) => row.prefecture !== null);
+  const summaryMap = new Map<string, { achievedCount: number; totalCount: number }>(
+    PREFECTURES.map((prefecture) => [prefecture, { achievedCount: 0, totalCount: 0 }])
+  );
+
+  for (const row of rows) {
+    if (!row.prefecture) {
+      continue;
+    }
+
+    const current = summaryMap.get(row.prefecture) ?? { achievedCount: 0, totalCount: 0 };
+    current.totalCount += 1;
+    if (row.first_achieved_on) {
+      current.achievedCount += 1;
+    }
+    summaryMap.set(row.prefecture, current);
+  }
+
+  const prefectures = PREFECTURES.map((prefecture) => ({
+    key: prefecture,
+    label: prefecture,
+    achievedCount: summaryMap.get(prefecture)?.achievedCount ?? 0,
+    totalCount: summaryMap.get(prefecture)?.totalCount ?? 0
+  }));
+
+  return { prefectures };
+}
+
+export async function getStationsByHistoryPrefecture(prefecture: string): Promise<{
+  prefectureLabel: string;
+  achievedCount: number;
+  totalCount: number;
+  stations: HistoryPrefectureStationSummary[];
+}> {
+  const supabaseAdmin = getSupabaseAdmin();
+  const [stations, { data: companiesData, error: companiesError }] = await Promise.all([
+    getHistoryStationSnapshots(),
+    supabaseAdmin.from("mst_company").select("id, name").eq("is_deleted", false)
+  ]);
+  const companies = (ensure(companiesData, companiesError) ?? []) as Array<Pick<Company, "id" | "name">>;
+  const companyMap = new Map(companies.map((company) => [company.id, company.name]));
+
+  const filtered = stations
+    .filter((station) => station.prefecture === prefecture)
+    .sort((a, b) => a.id - b.id);
+  const achievedCount = filtered.filter((station) => station.first_achieved_on !== null).length;
+
+  return {
+    prefectureLabel: prefecture,
+    achievedCount,
+    totalCount: filtered.length,
     stations: filtered.map((station) => ({
       id: station.id,
       name: station.name,
-      companyName: companyMap.get(station.company_id) ?? "会社不明"
+      companyName: companyMap.get(station.company_id) ?? "会社不明",
+      isShinkansen: station.is_shinkansen,
+      note: station.note,
+      isAchieved: station.first_achieved_on !== null
     }))
   };
 }

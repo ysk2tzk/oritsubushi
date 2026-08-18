@@ -40,9 +40,19 @@ export default async function HistoryDayPage({
               </div>
             ) : (
               stations.map((station) => (
-                <Link key={station.id} href={`/stations/${station.id}`} className="list-link">
-                  <strong>{station.name}</strong>
-                  <span className="subtle">{station.companyName}</span>
+                <Link
+                  key={station.id}
+                  href={`/stations/${station.id}`}
+                  className="list-link station-status-card station-status-card-achieved"
+                >
+                  <div className="station-title-row">
+                    <strong>{station.name}</strong>
+                    {station.isShinkansen ? <span className="station-chip">新幹線</span> : null}
+                  </div>
+                  <div className="station-meta-row">
+                    <span className="subtle">{station.companyName}</span>
+                  </div>
+                  {station.note ? <span className="subtle">{`note: ${station.note}`}</span> : null}
                 </Link>
               ))
             )}

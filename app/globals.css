@@ -198,6 +198,15 @@ textarea {
   width: 100%;
 }
 
+.prefecture-header-card {
+  gap: 8px;
+  padding-bottom: 10px;
+}
+
+.prefecture-header-count {
+  margin: 0;
+}
+
 .list-link {
   display: grid;
   gap: 4px;
@@ -212,6 +221,73 @@ textarea {
 
 .list-link strong {
   font-size: 1rem;
+}
+
+.station-status-card {
+  gap: 6px;
+}
+
+.station-status-card-achieved {
+  border-color: rgba(15, 118, 110, 0.28);
+  background: rgba(236, 253, 245, 0.82);
+}
+
+.station-status-card-pending {
+  border-color: rgba(180, 83, 9, 0.28);
+  background: rgba(255, 247, 237, 0.88);
+}
+
+.station-status-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.station-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.station-status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.5rem;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.station-status-badge-achieved {
+  background: rgba(15, 118, 110, 0.14);
+  color: #0f766e;
+}
+
+.station-status-badge-pending {
+  background: rgba(180, 83, 9, 0.14);
+  color: #b45309;
+}
+
+.station-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.station-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.12);
+  color: #1d4ed8;
+  font-size: 0.75rem;
+  font-weight: 700;
 }
 
 @media (max-width: 520px) {
